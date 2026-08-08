@@ -1,0 +1,25 @@
+# Stage 1: Build
+FROM golang:1.22-alpine AS builder
+
+WORKDIR /app
+
+# Copiar go.mod y código fuente
+COPY go.mod ./
+COPY . .
+
+# Descargar dependencias y generar go.sum de forma automática
+RUN go mod tidy
+
+# Compilar binario del Worker
+RUN CGO_ENABLED=0 GOOS=linux go build -o /worker-app ./cmd/worker/main.go
+
+# Stage 2: Runtime Minimal Image
+FROM alpine:3.19
+
+RUN apk --no-cache add ca-certificates curl
+
+WORKDIR /root/
+
+COPY --from=builder /worker-app .
+
+CMD ["./worker-app"]

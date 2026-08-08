@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plataforma OKF Converter — Universidad de los Andes</title>
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="background-globes">
+        <div class="globe globe-1"></div>
+        <div class="globe globe-2"></div>
+    </div>
+
+    <!-- Header Institucional UniAndes -->
+    <header class="navbar">
+        <div class="container nav-content">
+            <div class="brand">
+                <span class="uniandes-logo-icon">UNIANDES</span>
+                <div class="brand-text">
+                    <span class="brand-title">OKF <span class="highlight">Converter</span></span>
+                    <span class="brand-subtitle">ISIS4426 Cloud Solutions</span>
+                </div>
+            </div>
+            <div class="user-controls" id="userControls" style="display: none;">
+                <span class="user-badge" id="userEmailBadge">usuario@uniandes.edu.co</span>
+                <button class="btn btn-outline" id="logoutBtn">Cerrar Sesión</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="container main-content">
+        <!-- Section 1: Auth (Login & Register) -->
+        <section id="authSection" class="card auth-card">
+            <div class="auth-header">
+                <h2>Acceso a la Plataforma</h2>
+                <p>Ingresa tus credenciales para convertir tus documentos a Bundles OKF de forma asíncrona.</p>
+            </div>
+
+            <div class="auth-tabs">
+                <button class="tab-btn active" id="loginTabBtn">Iniciar Sesión</button>
+                <button class="tab-btn" id="registerTabBtn">Registrarse</button>
+            </div>
+
+            <form id="authForm" class="form-layout">
+                <div class="form-group">
+                    <label for="emailInput">Correo Electrónico Institucional</label>
+                    <input type="email" id="emailInput" placeholder="estudiante@uniandes.edu.co" required>
+                </div>
+                <div class="form-group">
+                    <label for="passwordInput">Contraseña</label>
+                    <input type="password" id="passwordInput" placeholder="••••••••" required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block" id="authSubmitBtn">Entrar a la Plataforma</button>
+            </form>
+            <div id="authAlert" class="alert hidden"></div>
+        </section>
+
+        <!-- Section 2: Dashboard (Upload & Jobs) -->
+        <section id="dashboardSection" class="dashboard-grid hidden">
+            <!-- Upload Box -->
+            <div class="card upload-card">
+                <h3>Nueva Solicitud de Conversión</h3>
+                <p>Carga un archivo (.md, .txt, .html, .docx, .pdf) para enviarlo a la cola de procesamiento asíncrono.</p>
+                
+                <div class="drop-zone" id="dropZone">
+                    <div class="drop-icon">📁</div>
+                    <p class="drop-title">Arrastra tu documento aquí</p>
+                    <p class="drop-subtitle">o haz clic para examinar desde tu equipo</p>
+                    <input type="file" id="fileInput" accept=".md,.markdown,.txt,.html,.docx,.pdf" class="file-input-hidden">
+                </div>
+                
+                <div id="selectedFileDetails" class="selected-file hidden">
+                    <span class="file-icon">📄</span>
+                    <span id="fileName">documento.md</span>
+                    <span id="fileSize" class="file-size">12 KB</span>
+                </div>
+
+                <button class="btn btn-primary btn-block" id="uploadBtn" disabled>
+                    <span id="uploadBtnText">Enviar a Procesamiento Asíncrono</span>
+                </button>
+            </div>
+
+            <!-- Jobs List Table -->
+            <div class="card jobs-card">
+                <div class="jobs-header">
+                    <h3>Trabajos de Conversión</h3>
+                    <button class="btn btn-icon" id="refreshJobsBtn" title="Actualizar lista">🔄</button>
+                </div>
+                <div class="table-responsive">
+                    <table class="jobs-table">
+                        <thead>
+                            <tr>
+                                <th>ID Trabajo</th>
+                                <th>Archivo Origen</th>
+                                <th>Estado</th>
+                                <th>Unidades</th>
+                                <th>Fecha</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="jobsTableBody">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">Cargando trabajos...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Modal: Trazabilidad y Logs OKF -->
+        <div id="logsModal" class="modal-overlay hidden">
+            <div class="modal-card card">
+                <div class="modal-header">
+                    <h3 id="modalTitle">Trazabilidad del Bundle OKF</h3>
+                    <button class="btn-close" id="closeModalBtn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="modal-info-bar">
+                        <div><strong>Job ID:</strong> <code id="modalJobId">-</code></div>
+                        <div><strong>Estado:</strong> <span id="modalStatusBadge" class="badge">-</span></div>
+                    </div>
+                    <h4>Log de Auditoría (log.md)</h4>
+                    <div class="terminal-view" id="modalTerminal">
+                        <pre id="modalLogsContent">Cargando trazabilidad...</pre>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="modalCloseBtn">Cerrar</button>
+                    <button class="btn btn-success hidden" id="modalDownloadBtn">Descargar Bundle OKF (.zip)</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer container">
+        <p>Universidad de los Andes — ISIS4426 Desarrollo de Soluciones Cloud</p>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>

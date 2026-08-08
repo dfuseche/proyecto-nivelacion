@@ -1,0 +1,113 @@
+services:
+  # 1. Base de Datos de Metadatos (PostgreSQL)
+  postgres:
+    image: postgres:16-alpine
+    container_name: okf_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-okf_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-okf_password}
+      POSTGRES_DB: ${DB_NAME:-okf_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-okf_user} -d ${DB_NAME:-okf_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. Cola de Mensajes (RabbitMQ)
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: okf_rabbitmq
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"    # Puerto AMQP
+      - "15672:15672"  # Dashboard Web de Administración
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 3. Almacenamiento de Objetos (MinIO - S3 Compatible)
+  minio:
+    image: minio/minio:latest
+    container_name: okf_minio
+    restart: always
+    entrypoint: sh
+    command: -c 'minio server /data --console-address ":9001"'
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000"    # API S3
+      - "9001:9001"    # Dashboard Web MinIO
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 4. Backend API en Go (Stateless)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: okf_api
+    restart: always
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  # 5. Worker en Go (Procesamiento Asíncrono)
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: okf_worker
+    restart: always
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  # 6. Frontend Web (React / Vite)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: okf_frontend
+    restart: always
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+  minio_data:
