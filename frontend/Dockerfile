@@ -1,5 +1,8 @@
 FROM nginx:alpine
 
+# Copiar configuración Nginx sin caché
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
 # Copiar archivos estáticos de la aplicación Web
 COPY index.html /usr/share/nginx/html/index.html
 COPY styles.css /usr/share/nginx/html/styles.css

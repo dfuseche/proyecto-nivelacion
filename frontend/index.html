@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=3.0">
 </head>
 <body>
     <div class="background-globes">
@@ -85,11 +85,11 @@
                 </button>
             </div>
 
-            <!-- Jobs List Table -->
+            <!-- Jobs List Table (Agrandada) -->
             <div class="card jobs-card">
                 <div class="jobs-header">
                     <h3>Trabajos de Conversión</h3>
-                    <button class="btn btn-icon" id="refreshJobsBtn" title="Actualizar lista">🔄</button>
+                    <button class="btn btn-icon" id="refreshJobsBtn" title="Actualizar lista">🔄 Actualizar</button>
                 </div>
                 <div class="table-responsive">
                     <table class="jobs-table">
@@ -99,8 +99,8 @@
                                 <th>Archivo Origen</th>
                                 <th>Estado</th>
                                 <th>Unidades</th>
-                                <th>Fecha</th>
-                                <th>Acciones</th>
+                                <th>Hora</th>
+                                <th>Acciones de Gestión</th>
                             </tr>
                         </thead>
                         <tbody id="jobsTableBody">
@@ -109,6 +109,22 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
+
+                <!-- Barra de Paginación Mejorada -->
+                <div class="pagination-container" id="paginationContainer">
+                    <div class="pagination-info" id="paginationInfo">Mostrando 0 trabajos</div>
+                    <div class="pagination-controls">
+                        <button class="btn btn-outline btn-sm" id="prevPageBtn" onclick="changePage(currentPage - 1)" disabled>&laquo; Anterior</button>
+                        <span class="page-indicator" id="pageIndicator">Página 1 de 1</span>
+                        <button class="btn btn-outline btn-sm" id="nextPageBtn" onclick="changePage(currentPage + 1)" disabled>Siguiente &raquo;</button>
+                        <label for="pageSizeSelect" class="page-size-label">Ver:</label>
+                        <select id="pageSizeSelect" class="page-size-select" onchange="changePageSize(this.value)">
+                            <option value="5" selected>5 por pág.</option>
+                            <option value="10">10 por pág.</option>
+                            <option value="20">20 por pág.</option>
+                        </select>
+                    </div>
                 </div>
             </div>
         </section>
@@ -142,6 +158,6 @@
         <p>Universidad de los Andes — ISIS4426 Desarrollo de Soluciones Cloud</p>
     </footer>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=3.0"></script>
 </body>
 </html>

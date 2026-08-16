@@ -161,6 +161,22 @@ func (db *DB) GetJobsByUserID(userID uuid.UUID) ([]domain.Job, error) {
 	return jobs, nil
 }
 
+func (db *DB) DeleteJob(jobID, userID uuid.UUID) error {
+	_, _ = db.conn.Exec(`DELETE FROM bundle_logs WHERE job_id = $1`, jobID)
+
+	res, err := db.conn.Exec(`DELETE FROM jobs WHERE id = $1 AND user_id = $2`, jobID, userID)
+	if err != nil {
+		return fmt.Errorf("error eliminando trabajo de la base de datos: %w", err)
+	}
+
+	rowsAffected, _ := res.RowsAffected()
+	if rowsAffected == 0 {
+		return errors.New("trabajo no encontrado o no autorizado para eliminación")
+	}
+
+	return nil
+}
+
 func (db *DB) AddBundleLog(bLog *domain.BundleLog) error {
 	query := `
 		INSERT INTO bundle_logs (id, job_id, step, status, message)

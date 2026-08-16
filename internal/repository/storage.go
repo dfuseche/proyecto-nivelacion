@@ -69,3 +69,14 @@ func (s *Storage) DownloadFile(ctx context.Context, objectKey string) (io.ReadCl
 	}
 	return object, nil
 }
+
+func (s *Storage) DeleteFile(ctx context.Context, objectKey string) error {
+	if objectKey == "" {
+		return nil
+	}
+	err := s.client.RemoveObject(ctx, s.bucket, objectKey, minio.RemoveObjectOptions{})
+	if err != nil {
+		return fmt.Errorf("error al eliminar objeto de MinIO (%s): %w", objectKey, err)
+	}
+	return nil
+}

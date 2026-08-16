@@ -41,7 +41,7 @@ func isAllowedExtension(filename string) bool {
 
 func (s *JobService) CreateJob(ctx context.Context, userID uuid.UUID, filename string, reader io.Reader, size int64) (*domain.Job, error) {
 	if !isAllowedExtension(filename) {
-		return nil, fmt.Errorf("formato '%s' no permitido. Formatos soportados: .md, .txt, .html, .markdown", filepath.Ext(filename))
+		return nil, fmt.Errorf("formato '%s' no permitido. Formatos soportados: .md, .txt, .html, .markdown, .docx, .pdf", filepath.Ext(filename))
 	}
 
 	jobID := uuid.New()
@@ -84,7 +84,6 @@ func (s *JobService) CreateJob(ctx context.Context, userID uuid.UUID, filename s
 	}
 
 	if err := s.queue.PublishJob(payload); err != nil {
-		// Marcar job como FAILED si no se pudo encolar
 		_ = s.db.UpdateJobStatus(jobID, domain.StatusFailed, "", "Error al publicar trabajo en la cola de mensajes", 0)
 		return nil, fmt.Errorf("error publicando en la cola: %w", err)
 	}
@@ -115,13 +114,33 @@ func (s *JobService) GetJobsByUserID(userID uuid.UUID) ([]domain.Job, error) {
 	return s.db.GetJobsByUserID(userID)
 }
 
+func (s *JobService) DeleteJob(ctx context.Context, jobID, userID uuid.UUID) error {
+	job, err := s.db.GetJobByID(jobID)
+	if err != nil {
+		return errors.New("trabajo no encontrado")
+	}
+
+	// Regla de Aislamiento Multiusuario: Verificar propiedad
+	if job.UserID != userID {
+		return errors.New("acceso denegado: no es propietario de este recurso")
+	}
+
+	if job.FileKey != "" {
+		_ = s.storage.DeleteFile(ctx, job.FileKey)
+	}
+	if job.BundleKey != "" {
+		_ = s.storage.DeleteFile(ctx, job.BundleKey)
+	}
+
+	return s.db.DeleteJob(jobID, userID)
+}
+
 func (s *JobService) GetDownloadStream(ctx context.Context, jobID, userID uuid.UUID) (io.ReadCloser, string, error) {
 	job, err := s.db.GetJobByID(jobID)
 	if err != nil {
 		return nil, "", errors.New("trabajo no encontrado")
 	}
 
-	// Regla de Aislamiento Multiusuario: Verificar propiedad
 	if job.UserID != userID {
 		return nil, "", errors.New("acceso denegado: no es propietario de este recurso")
 	}

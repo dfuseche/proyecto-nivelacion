@@ -49,6 +49,7 @@ func main() {
 	corsConfig := cors.DefaultConfig()
 	corsConfig.AllowAllOrigins = true
 	corsConfig.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Authorization"}
+	corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
 	r.Use(cors.New(corsConfig))
 
 	// Endpoint de Salud (Healthcheck)
@@ -121,7 +122,6 @@ func main() {
 				return
 			}
 
-			// Responde inmediatamente con HTTP 202 Accepted
 			c.JSON(http.StatusAccepted, gin.H{
 				"message": "Archivo recibido correctamente. El procesamiento ha iniciado en segundo plano.",
 				"job_id":  job.ID,
@@ -157,7 +157,6 @@ func main() {
 
 			job, logs, err := jobService.GetJobByID(jobID, userID)
 			if err != nil {
-				// Retorna 403 o 404 seguro para evitar fuga de información
 				c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 				return
 			}
@@ -166,6 +165,26 @@ func main() {
 				"job":  job,
 				"logs": logs,
 			})
+		})
+
+		// Eliminar Trabajo (Con Aislamiento)
+		protectedGroup.DELETE("/:id", func(c *gin.Context) {
+			userIDVal, _ := c.Get("user_id")
+			userID := userIDVal.(uuid.UUID)
+
+			jobIDStr := c.Param("id")
+			jobID, err := uuid.Parse(jobIDStr)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "ID de trabajo inválido"})
+				return
+			}
+
+			if err := jobService.DeleteJob(c.Request.Context(), jobID, userID); err != nil {
+				c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+				return
+			}
+
+			c.JSON(http.StatusOK, gin.H{"message": "Trabajo eliminado exitosamente"})
 		})
 
 		// Descargar Bundle OKF (Con Aislamiento)
