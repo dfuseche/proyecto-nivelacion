@@ -53,7 +53,7 @@ func (c *OKFConverter) ConvertToOKFBundle(jobID uuid.UUID, originalFilename stri
 		}
 	}
 
-	units := c.segmentDocument(text)
+	units := c.segmentDocument(text, originalFilename)
 
 	if len(units) == 0 {
 		title := strings.TrimSuffix(originalFilename, filepath.Ext(originalFilename))
@@ -100,14 +100,14 @@ func (c *OKFConverter) ConvertToOKFBundle(jobID uuid.UUID, originalFilename stri
 	return zipBuffer.Bytes(), len(units), nil
 }
 
-func (c *OKFConverter) segmentDocument(text string) []LogicUnit {
+func (c *OKFConverter) segmentDocument(text string, originalFilename string) []LogicUnit {
 	text = strings.TrimSpace(text)
 	if len(text) == 0 {
 		return []LogicUnit{}
 	}
 
-	// 1. Segmentar por encabezados Markdown (#, ##, ###)
-	units := c.segmentByHeaders(text)
+	// 1. Intentar segmentación por patrones estructurales (Markdown #, CHAPTER X, Capítulo X, Sección X, 1. Title)
+	units := c.segmentByStructuredPattern(text)
 
 	if len(units) > 1 {
 		for i := range units {
@@ -116,66 +116,79 @@ func (c *OKFConverter) segmentDocument(text string) []LogicUnit {
 		return units
 	}
 
-	// 2. Si es un documento extenso (> 1200 caracteres) y solo produjo 1 unidad, segmentar por bloques/longitud
-	if len(text) > 1200 {
-		units = c.segmentLongDocument(text)
-	}
-
-	// 3. Fallback para documentos breves (< 1200 caracteres)
-	if len(units) <= 1 {
-		units = []LogicUnit{
-			{
-				Filename: "documento.md",
-				Title:    "Documento Principal",
-				Content:  text,
-			},
-		}
-	} else {
-		for i := range units {
-			units[i].Filename = fmt.Sprintf("capitulo-%02d.md", i+1)
+	// 2. Si el documento es extenso (> 1500 caracteres) y no tenía patrones explícitos, dividir en fragmentos lógicos
+	if len(text) > 1500 {
+		units = c.segmentLongDocument(text, originalFilename)
+		if len(units) > 1 {
+			for i := range units {
+				units[i].Filename = fmt.Sprintf("capitulo-%02d.md", i+1)
+			}
+			return units
 		}
 	}
 
-	return units
+	// 3. Documento Breve (< 1500 caracteres y sin divisiones)
+	docTitle := strings.TrimSuffix(originalFilename, filepath.Ext(originalFilename))
+	if docTitle == "" {
+		docTitle = "Documento Principal"
+	}
+
+	return []LogicUnit{
+		{
+			Filename: "documento.md",
+			Title:    docTitle,
+			Content:  text,
+		},
+	}
 }
 
-func (c *OKFConverter) segmentByHeaders(text string) []LogicUnit {
+func (c *OKFConverter) segmentByStructuredPattern(text string) []LogicUnit {
 	lines := strings.Split(text, "\n")
 	var units []LogicUnit
-
-	headerRegex := regexp.MustCompile(`^(?i)#+\s+(.+)`)
 
 	var currentTitle string
 	var currentLines []string
 
-	for _, line := range lines {
-		matches := headerRegex.FindStringSubmatch(strings.TrimSpace(line))
-		if len(matches) > 1 {
-			headerText := strings.TrimSpace(matches[1])
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+		trimmed := strings.TrimSpace(line)
 
+		title, isHeading := isHeadingLine(trimmed)
+
+		// Si es un patrón "CHAPTER X", verificar si la siguiente línea contiene el subtítulo (ej: "The Beginning")
+		if isHeading && i+1 < len(lines) {
+			nextLine := strings.TrimSpace(lines[i+1])
+			_, nextIsHeading := isHeadingLine(nextLine)
+			if len(nextLine) > 0 && len(nextLine) < 60 && !nextIsHeading && !strings.HasSuffix(nextLine, ".") {
+				title = fmt.Sprintf("%s - %s", title, nextLine)
+				i++ // Avanzar una línea adicional
+			}
+		}
+
+		if isHeading {
 			if len(currentLines) > 0 {
-				title := currentTitle
-				if title == "" {
-					title = fmt.Sprintf("Unidad %02d", len(units)+1)
+				unitTitle := currentTitle
+				if unitTitle == "" {
+					unitTitle = fmt.Sprintf("Capítulo %02d", len(units)+1)
 				}
 				units = append(units, LogicUnit{
-					Title:   title,
+					Title:   unitTitle,
 					Content: strings.Join(currentLines, "\n"),
 				})
 				currentLines = nil
 			}
-			currentTitle = headerText
+			currentTitle = title
 		}
 		currentLines = append(currentLines, line)
 	}
 
 	if len(currentLines) > 0 {
-		title := currentTitle
-		if title == "" {
-			title = fmt.Sprintf("Unidad %02d", len(units)+1)
+		unitTitle := currentTitle
+		if unitTitle == "" {
+			unitTitle = fmt.Sprintf("Capítulo %02d", len(units)+1)
 		}
 		units = append(units, LogicUnit{
-			Title:   title,
+			Title:   unitTitle,
 			Content: strings.Join(currentLines, "\n"),
 		})
 	}
@@ -183,7 +196,42 @@ func (c *OKFConverter) segmentByHeaders(text string) []LogicUnit {
 	return units
 }
 
-func (c *OKFConverter) segmentLongDocument(text string) []LogicUnit {
+func isHeadingLine(line string) (string, bool) {
+	trimmed := strings.TrimSpace(line)
+	if len(trimmed) == 0 {
+		return "", false
+	}
+
+	// Pattern A: Markdown Headers (# Title, ## Title, ### Title)
+	mdHeaderRegex := regexp.MustCompile(`^(?i)#+\s+(.+)`)
+	if m := mdHeaderRegex.FindStringSubmatch(trimmed); len(m) > 1 {
+		return strings.TrimSpace(m[1]), true
+	}
+
+	// Pattern B: Chapter / Section Keywords (CHAPTER 1, Chapter 01, CAPÍTULO 1, SECCIÓN 1, PAGE 1)
+	chapterRegex := regexp.MustCompile(`^(?i)(?:CHAPTER|CAPÍTULO|CAPITULO|SECCIÓN|SECCION|PARTE)\s+(\d+|[IVXLCDM]+)(?:[\s:-]+(.*))?$`)
+	if m := chapterRegex.FindStringSubmatch(trimmed); len(m) > 1 {
+		chNum := m[1]
+		chSub := ""
+		if len(m) > 2 {
+			chSub = strings.TrimSpace(m[2])
+		}
+		if chSub != "" {
+			return fmt.Sprintf("Capítulo %s: %s", chNum, chSub), true
+		}
+		return fmt.Sprintf("Capítulo %s", chNum), true
+	}
+
+	// Pattern C: Numbered Section Headings (1. Introducción, 2. Arquitectura)
+	numberedRegex := regexp.MustCompile(`^(\d+)\.\s+([A-ZÁÉÍÓÚÑ].{2,60})$`)
+	if m := numberedRegex.FindStringSubmatch(trimmed); len(m) > 2 {
+		return fmt.Sprintf("Sección %s: %s", m[1], m[2]), true
+	}
+
+	return "", false
+}
+
+func (c *OKFConverter) segmentLongDocument(text string, originalFilename string) []LogicUnit {
 	var units []LogicUnit
 
 	paragraphs := strings.Split(text, "\n\n")
@@ -211,9 +259,10 @@ func (c *OKFConverter) segmentLongDocument(text string) []LogicUnit {
 			}
 		}
 
-		if chunkSize >= 1000 {
+		// Cuando la unidad acumula ~1800 caracteres, crear una nueva unidad lógica de concepto
+		if chunkSize >= 1800 {
 			if currentTitle == "" {
-				currentTitle = fmt.Sprintf("Sección %02d", unitIndex)
+				currentTitle = fmt.Sprintf("Capítulo %02d", unitIndex)
 			}
 			units = append(units, LogicUnit{
 				Filename: fmt.Sprintf("capitulo-%02d.md", unitIndex),
@@ -230,7 +279,7 @@ func (c *OKFConverter) segmentLongDocument(text string) []LogicUnit {
 
 	if currentChunk.Len() > 0 {
 		if currentTitle == "" {
-			currentTitle = fmt.Sprintf("Sección %02d", unitIndex)
+			currentTitle = fmt.Sprintf("Capítulo %02d", unitIndex)
 		}
 		units = append(units, LogicUnit{
 			Filename: fmt.Sprintf("capitulo-%02d.md", unitIndex),
@@ -377,7 +426,7 @@ func extractTextFromPdf(rawContent []byte, originalFilename string) (string, err
 			if err == nil {
 				cleaned := cleanExtractedText(plainText)
 				if len(cleaned) > 0 {
-					pagesText = append(pagesText, fmt.Sprintf("# Página %d\n\n%s", i, cleaned))
+					pagesText = append(pagesText, cleaned)
 				}
 			}
 		}
@@ -386,7 +435,7 @@ func extractTextFromPdf(rawContent []byte, originalFilename string) (string, err
 	if len(pagesText) == 0 {
 		fallbackText := extractPdfFallbackText(rawContent)
 		if len(fallbackText) > 0 {
-			pagesText = append(pagesText, fmt.Sprintf("# %s\n\n%s", title, fallbackText))
+			pagesText = append(pagesText, fallbackText)
 		}
 	}
 

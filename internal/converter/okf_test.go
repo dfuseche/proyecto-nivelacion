@@ -46,25 +46,31 @@ func TestOKFConverter_SingleUnit(t *testing.T) {
 	}
 }
 
-func TestOKFConverter_MultipleUnits(t *testing.T) {
+func TestOKFConverter_MultipleChapters(t *testing.T) {
 	conv := NewOKFConverter()
 	jobID := uuid.New()
-	content := []byte(`# Introducción
-Bienvenido al curso.
+	content := []byte(`Lorem Ipsum
+A Book in Fifteen Chapters
 
-# Capítulo 1: Arquitectura
-Detalles de Docker.
+CHAPTER 1
+The Beginning
+Lorem ipsum dolor sit amet, consectetur adipiscing elit.
 
-# Capítulo 2: Workers
-Detalles de Go y colas.`)
+CHAPTER 2
+A New Direction
+Lorem ipsum dolor sit amet, consectetur adipiscing elit.
 
-	zipBytes, unitsCount, err := conv.ConvertToOKFBundle(jobID, "manual.md", content, []string{})
+CHAPTER 3
+Shifting Sands
+Lorem ipsum dolor sit amet, consectetur adipiscing elit.`)
+
+	zipBytes, unitsCount, err := conv.ConvertToOKFBundle(jobID, "book.pdf", content, []string{})
 	if err != nil {
-		t.Fatalf("error convirtiendo documento estructurado: %v", err)
+		t.Fatalf("error convirtiendo documento con capítulos: %v", err)
 	}
 
 	if unitsCount != 3 {
-		t.Errorf("se esperaban 3 unidades de concepto, se obtuvieron %d", unitsCount)
+		t.Errorf("se esperaban 3 unidades de capítulos, se obtuvieron %d", unitsCount)
 	}
 
 	zipReader, _ := zip.NewReader(bytes.NewReader(zipBytes), int64(len(zipBytes)))
@@ -74,7 +80,7 @@ Detalles de Go y colas.`)
 	}
 
 	if filesMap["capitulo-01.md"] == nil || filesMap["capitulo-02.md"] == nil || filesMap["capitulo-03.md"] == nil {
-		t.Error("el bundle estructurado debe contener capitulo-01.md, capitulo-02.md y capitulo-03.md")
+		t.Error("el bundle debe contener capitulo-01.md, capitulo-02.md y capitulo-03.md")
 	}
 
 	indexFile := filesMap["index.md"]
@@ -82,8 +88,8 @@ Detalles de Go y colas.`)
 	indexContent, _ := io.ReadAll(rc)
 	rc.Close()
 
-	if !bytes.Contains(indexContent, []byte("[Introducción](capitulo-01.md)")) {
-		t.Errorf("index.md debe enlazar capitulo-01.md con 'Introducción'. Contenido:\n%s", string(indexContent))
+	if !bytes.Contains(indexContent, []byte("Capítulo 1")) || !bytes.Contains(indexContent, []byte("capitulo-01.md")) {
+		t.Errorf("index.md debe enlazar capitulo-01.md. Obtenido:\n%s", string(indexContent))
 	}
 }
 
@@ -91,7 +97,6 @@ func TestOKFConverter_LongDocumentAutoSegmentation(t *testing.T) {
 	conv := NewOKFConverter()
 	jobID := uuid.New()
 
-	// Generar un documento largo sin encabezados (#) de más de 3000 caracteres
 	var sb strings.Builder
 	for i := 1; i <= 30; i++ {
 		sb.WriteString(fmt.Sprintf("Párrafo %d: Este es un texto largo explicativo que simula un documento extenso sin formato markdown explicito.\n\n", i))
@@ -112,7 +117,6 @@ func TestOKFConverter_LongDocumentAutoSegmentation(t *testing.T) {
 		filesMap[f.Name] = f
 	}
 
-	// Verificar index.md
 	indexFile := filesMap["index.md"]
 	rc, _ := indexFile.Open()
 	indexContent, _ := io.ReadAll(rc)
