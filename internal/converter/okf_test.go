@@ -3,7 +3,9 @@ package converter
 import (
 	"archive/zip"
 	"bytes"
+	"fmt"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -23,7 +25,6 @@ func TestOKFConverter_SingleUnit(t *testing.T) {
 		t.Errorf("se esperaba 1 unidad de concepto, se obtuvieron %d", unitsCount)
 	}
 
-	// Verificar contenido del ZIP
 	zipReader, err := zip.NewReader(bytes.NewReader(zipBytes), int64(len(zipBytes)))
 	if err != nil {
 		t.Fatalf("error leyendo paquete zip generado: %v", err)
@@ -76,13 +77,48 @@ Detalles de Go y colas.`)
 		t.Error("el bundle estructurado debe contener capitulo-01.md, capitulo-02.md y capitulo-03.md")
 	}
 
-	// Verificar enlaces dentro de index.md
 	indexFile := filesMap["index.md"]
 	rc, _ := indexFile.Open()
 	indexContent, _ := io.ReadAll(rc)
 	rc.Close()
 
 	if !bytes.Contains(indexContent, []byte("[Introducción](capitulo-01.md)")) {
-		t.Error("index.md debe enlazar capitulo-01.md con el título 'Introducción'")
+		t.Errorf("index.md debe enlazar capitulo-01.md con 'Introducción'. Contenido:\n%s", string(indexContent))
+	}
+}
+
+func TestOKFConverter_LongDocumentAutoSegmentation(t *testing.T) {
+	conv := NewOKFConverter()
+	jobID := uuid.New()
+
+	// Generar un documento largo sin encabezados (#) de más de 3000 caracteres
+	var sb strings.Builder
+	for i := 1; i <= 30; i++ {
+		sb.WriteString(fmt.Sprintf("Párrafo %d: Este es un texto largo explicativo que simula un documento extenso sin formato markdown explicito.\n\n", i))
+	}
+
+	zipBytes, unitsCount, err := conv.ConvertToOKFBundle(jobID, "documento_largo.txt", []byte(sb.String()), []string{})
+	if err != nil {
+		t.Fatalf("error convirtiendo documento largo: %v", err)
+	}
+
+	if unitsCount <= 1 {
+		t.Errorf("se esperaban múltiples unidades lógicas para un documento extenso, pero se obtuvieron %d", unitsCount)
+	}
+
+	zipReader, _ := zip.NewReader(bytes.NewReader(zipBytes), int64(len(zipBytes)))
+	filesMap := make(map[string]*zip.File)
+	for _, f := range zipReader.File {
+		filesMap[f.Name] = f
+	}
+
+	// Verificar index.md
+	indexFile := filesMap["index.md"]
+	rc, _ := indexFile.Open()
+	indexContent, _ := io.ReadAll(rc)
+	rc.Close()
+
+	if !bytes.Contains(indexContent, []byte("capitulo-01.md")) || !bytes.Contains(indexContent, []byte("capitulo-02.md")) {
+		t.Errorf("index.md debe listar los capítulos segmentados. Obtenido:\n%s", string(indexContent))
 	}
 }

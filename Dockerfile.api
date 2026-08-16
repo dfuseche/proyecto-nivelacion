@@ -1,6 +1,9 @@
 # Stage 1: Build
 FROM golang:1.22-alpine AS builder
 
+# Instalar git para descarga de paquetes Go desde VCS
+RUN apk add --no-cache git
+
 WORKDIR /app
 
 # Copiar go.mod y código fuente
